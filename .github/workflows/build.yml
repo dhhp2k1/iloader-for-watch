@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "*"
+      - "!watch-v2.4.1"
   pull_request:
     branches:
       - "*"
