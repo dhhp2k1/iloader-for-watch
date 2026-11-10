@@ -266,24 +266,11 @@ async fn enable_wifi_connections(
 #[tauri::command]
 pub async fn list_devices(
     app: AppHandle,
-    device_state: State<'_, DeviceInfoMutex>,
 ) -> Result<Vec<Result<DeviceInfo, AppError>>, AppError> {
     let mut usbmuxd = get_usbmuxd().await?;
-
-    let selected_udid = {
-        let guard = device_state.lock().unwrap();
-        guard.as_ref().map(|selected| selected.info.udid.clone())
-    };
-
-    let mut known_udids: HashSet<String> = known_remote_pairing_udids(&app)?.into_iter().collect();
-
-    if let Some(udid) = selected_udid.as_ref() {
-        known_udids.insert(udid.clone());
-    }
-
     let mut known_pairings = Vec::new();
 
-    for udid in known_udids {
+    for udid in known_remote_pairing_udids(&app)? {
         match usbmuxd.get_pair_record(&udid).await {
             Ok(mut pairing_file) => {
                 pairing_file.udid = Some(udid.clone());
@@ -376,14 +363,6 @@ pub async fn list_devices(
         .collect();
 
     let mut device_infos = futures::future::join_all(device_info_futures).await;
-    let mut network_udids: HashSet<String> = device_infos
-        .iter()
-        .filter_map(|result| match result {
-            Ok(device) if device.connection_type == "Network" => Some(device.udid.clone()),
-            _ => None,
-        })
-        .collect();
-
     if !known_pairings.is_empty() {
         match discover_wifi_addresses().await {
             Ok(addresses) => {
@@ -402,11 +381,17 @@ pub async fn list_devices(
 
                         matched = true;
 
-                        if network_udids.insert(device.udid.clone()) {
-                            info!(
-                                "Discovered known Wi-Fi device {} ({}) at {}",
-                                device.name, device.udid, address
-                            );
+                        let existing = device_infos.iter_mut().find_map(|entry| {
+                            entry.as_mut().ok().filter(|current| {
+                                current.connection_type == "Network" && current.udid == device.udid
+                            })
+                        });
+                        if let Some(existing) = existing {
+                            // Keep the device row's existing ID, but make it usable for RSD.
+                            if existing.network_address.is_none() {
+                                existing.network_address = device.network_address;
+                            }
+                        } else {
                             device_infos.push(Ok(device));
                         }
 

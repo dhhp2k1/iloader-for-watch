@@ -13,6 +13,7 @@ export type DeviceInfo = {
   udid: string;
   connectionType: "USB" | "Network" | "Unknown";
   version: string;
+  networkAddress?: string | null;
 };
 
 export const Device = ({
@@ -120,7 +121,8 @@ export const Device = ({
             selectDevice(null);
           } else if (
             stillAvailable.id !== selectedDevice.id ||
-            stillAvailable.connectionType !== selectedDevice.connectionType
+            stillAvailable.connectionType !== selectedDevice.connectionType ||
+            stillAvailable.networkAddress !== selectedDevice.networkAddress
           ) {
             selectDevice(stillAvailable, false);
           }
